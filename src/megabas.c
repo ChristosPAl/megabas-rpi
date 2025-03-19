@@ -20,7 +20,7 @@
 
 #define VERSION_BASE	(int)1
 #define VERSION_MAJOR	(int)2
-#define VERSION_MINOR	(int)5
+#define VERSION_MINOR	(int)7
 
 #define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
 
@@ -280,6 +280,38 @@ int doBoard(int argc, char *argv[])
 	printf(
 		"Firmware ver %02d.%02d, CPU temperature %d C, Power source %0.2f V, Raspberry %0.2f V\n",
 		(int)buff[0], (int)buff[1], temperature, vIn, vRasp);
+	return OK;
+}
+
+int doReset(int argc, char *argv[]);
+const CliCmdType CMD_RESET = {"reset", 2, &doReset,
+	"\treset			reset the Microcontroller on the card\n",
+	"\tUsage:		megabas <id> reset\n", "",
+	"\tExample:		megabas 0 reset \n"};
+
+int doReset(int argc, char *argv[])
+{
+	int dev = -1;
+	u8 buff[5];
+	int resp = 0;
+
+	if (argc != 3)
+	{
+		printf("Invalid arguments number type \"megabas -h\" for details\n");
+		exit(1);
+	}
+	dev = doBoardInit(atoi(argv[1]));
+	if (dev <= 0)
+	{
+		exit(1);
+	}
+	resp = i2cMem8Write(dev, 0xaa, buff, 1);
+	if (FAIL == resp)
+	{
+		printf("Fail to reset the board!\n");
+		exit(1);
+	}
+	printf("RESET...\n");
 	return OK;
 }
 
@@ -2274,7 +2306,7 @@ int doRTCGet(int argc, char *argv[]);
 const CliCmdType CMD_RTC_GET =
 	{"rtcrd", 2, &doRTCGet,
 		"\trtcrd:		Get the internal RTC  date and time(mm/dd/yy hh:mm:ss)\n",
-		"\tUsage:		megbas <id> rtcrd \n", "",
+		"\tUsage:		megabas <id> rtcrd \n", "",
 		"\tExample:	megabas 0 rtcrd; Get the nternal RTC time and date on Board #0\n"};
 
 int doRTCGet(int argc, char *argv[])
@@ -2503,7 +2535,7 @@ int doOwbIdGet(int argc, char *argv[])
 
 	memcpy(&romID, &buff[0], 8);
 
-	printf("0x%llx\n", romID);
+	printf("0x%lx\n", romID);
 	return OK;
 }
 
@@ -2572,8 +2604,150 @@ int doOwbScan(int argc, char *argv[])
 	return OK;
 }
 
+
+int doInCfgWrite(int argc, char *argv[]);
+const CliCmdType CMD_IN_CONFIG_WRITE = 
+   {"incfgwr", 2, &doInCfgWrite,
+	"\tincfgwr:		Config input type to 0-10V(0); 1k Thermistor(1) or 10k Thermistor(2)\n",
+	"\tUsage:		megabas <id> incfgwr <channel> <0/1/2>\n",
+	"",
+	"\tExample:		megabas 0 incfgwr 2 1; Set channel #2 on Board #0 as 1k thermistor input\n"
+	};
+
+int doInCfgWrite(int argc, char *argv[])
+{
+	int pin = 0;
+	int val = 0;
+	int dev = 0;
+	int resp = 0;
+	uint8_t buff[3];
+	
+	if ( argc != 5)
+	{
+		printf("%s", CMD_IN_CONFIG_WRITE.usage1);
+		exit(1);
+	}
+
+	dev = doBoardInit(atoi(argv[1]));
+	if (dev <= 0)
+	{
+		exit(1);
+	}
+	
+	pin = atoi(argv[3]);
+	if ( (pin < CHANNEL_NR_MIN) || (pin > ADC_CH_NR_MAX))
+	{
+		printf("Input channel number value out of range\n");
+		exit(1);
+	}
+	val = atoi(argv[4]);
+
+			
+	resp = i2cMem8Read(dev, I2C_MEM_UIN_SEL, buff, 3);
+	if (FAIL == resp)
+	{
+		printf("Fail to read config!\n");
+		return ERROR;
+	}
+	switch (val)
+	{
+	case 0:
+		buff[0] |= 1 << (pin - 1);
+		buff[1] &= ~(1 << (pin - 1));
+		buff[2] &= ~(1 << (pin - 1));
+		break;
+	case 1:
+		buff[1] |= 1 << (pin - 1);
+		buff[0] &= ~(1 << (pin - 1));
+		buff[2] &= ~(1 << (pin - 1));
+		break;
+	case 2:
+		buff[2] |= 1 << (pin - 1);
+		buff[1] &= ~(1 << (pin - 1));
+		buff[0] &= ~(1 << (pin - 1));
+		break;
+	default:
+		printf("Invalid input type (0->0-10V; 1->1K; 2->10k)!\n");
+		exit(1);
+		break;
+	}
+
+	resp = i2cMem8Write(dev, I2C_MEM_UIN_SEL, buff, 3);
+	if (FAIL == resp)
+	{
+		printf("Fail to write tconfiguration\n");
+		exit(1);
+	}
+
+	return OK;
+}
+
+
+int doInCfgRead(int argc, char *argv[]);
+const CliCmdType CMD_IN_CONFIG_READ = 
+   {"incfgrd", 2, &doInCfgRead,
+	"\tincfgrd:		Display input type  0-10V(0); 1k Thermistor(1) or 10k Thermistor(2)\n",
+	"\tUsage:		megabas <id> incfgrd <channel>\n",
+	"",
+	"\tExample:		megabas 0 incfgrd 2; Display channel #2 on Board #0 input type\n"
+	};
+
+int doInCfgRead(int argc, char *argv[])
+{
+	int pin = 0;
+	int dev = 0;
+	int resp = 0;
+	uint8_t buff[3];
+	
+
+	if ( argc != 4)
+	{
+		printf("%s", CMD_IN_CONFIG_READ.usage1);
+		exit(1);
+	}
+
+	dev = doBoardInit(atoi(argv[1]));
+	if (dev <= 0)
+	{
+		exit(1);
+	}
+	
+	pin = atoi(argv[3]);
+	if ( (pin < CHANNEL_NR_MIN) || (pin > ADC_CH_NR_MAX))
+	{
+		printf("Input channel number value out of range\n");
+		exit(1);
+	}
+
+			
+	resp = i2cMem8Read(dev, I2C_MEM_UIN_SEL, buff, 3);
+	if (FAIL == resp)
+	{
+		printf("Fail to read config!\n");
+		return ERROR;
+	}
+	if(0 != (buff[0] & (1 << (pin - 1))))
+	{
+		printf("0\n");
+	}
+	else if(0 != (buff[1] & (1 << (pin - 1))))
+	{
+		printf("1\n");
+	}
+	else if(0 != (buff[2] & (1 << (pin - 1))))
+	{
+		printf("2\n");
+	}
+	else
+	{
+		printf("Invalid configuration detected!\n");
+	}
+	return OK;
+}
+
+
 const CliCmdType *gCmdArray[] = {&CMD_VERSION, &CMD_HELP, &CMD_WAR, &CMD_LIST,
-	&CMD_BOARD, &CMD_TRIAC_WRITE, &CMD_TRIAC_READ, &CMD_TEST, &CMD_CONTACT_READ,
+	&CMD_BOARD, &CMD_RESET, &CMD_TRIAC_WRITE, &CMD_TRIAC_READ, &CMD_TEST, &CMD_CONTACT_READ,
 	&CMD_COUNTER_READ, &CMD_COUNTER_RST, &CMD_EDGE_READ, &CMD_EDGE_WRITE,
 	&CMD_DAC_READ, &CMD_DAC_WRITE, &CMD_ADC_READ, &CMD_R1K_READ, &CMD_R10K_READ,
 	&CMD_ADC_CAL, &CMD_ADC_CAL_RST, &CMD_DAC_CAL, &CMD_DAC_CAL_RST,
@@ -2581,7 +2755,7 @@ const CliCmdType *gCmdArray[] = {&CMD_VERSION, &CMD_HELP, &CMD_WAR, &CMD_LIST,
 	&CMD_WDT_SET_INIT_PERIOD, &CMD_WDT_GET_INIT_PERIOD, &CMD_WDT_SET_OFF_PERIOD,
 	&CMD_WDT_GET_OFF_PERIOD, &CMD_RS485_READ, &CMD_RS485_WRITE, &CMD_RTC_GET,
 	&CMD_RTC_SET, &CMD_OWB_RD, &CMD_OWB_ID_RD, &CMD_OWB_SNS_CNT_RD,
-	&CMD_OWB_SCAN,&CMD_EXTI_READ, &CMD_EXTI_WRITE, &CMD_BUTTON_READ,
+	&CMD_OWB_SCAN,&CMD_EXTI_READ, &CMD_EXTI_WRITE, &CMD_BUTTON_READ,&CMD_IN_CONFIG_WRITE,&CMD_IN_CONFIG_READ,
 	NULL}; //null terminated array of cli structure pointers
 
 int main(int argc, char *argv[])

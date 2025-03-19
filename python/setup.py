@@ -1,9 +1,9 @@
 import setuptools
 
 setuptools.setup(
-    name='SMmegabas',
+    name='smmegabas',
     packages=setuptools.find_packages(),
-    version='1.0.1',
+    version='1.0.3',
     license='MIT',
     description='Library to control Sequent Microsystems megabas Card',
     author='Sequent Microsystems',
@@ -11,7 +11,7 @@ setuptools.setup(
     url='https://sequentmicrosystems.com',
     install_requires=[
         "smbus2",
-        ],
+    ],
     #keywords=['industrial', 'raspberry', 'power', '4-20mA', '0-10V', 'optoisolated'],
     classifiers=[
         'Development Status :: 4 - Beta',
